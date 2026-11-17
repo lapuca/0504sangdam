@@ -13,16 +13,6 @@ service cloud.firestore {
       return resource.data;
     }
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isAdmin() {
-      return isSignedIn() &&
-        request.auth.token.email == 'lapuca1@gmail.com' &&
-        request.auth.token.email_verified == true;
-    }
-
     function isValidDateString(d) {
       return d is string &&
         d.size() == 10 &&
@@ -33,6 +23,26 @@ service cloud.firestore {
       return slotId is string &&
         slotId.size() == 12 &&
         slotId.matches('^2026-(11-(1[7-9]|2[0-9]|30)|12-(0[1-9]|1[0-3]))_[12]$');
+    }
+
+    function isValidPasscode(code) {
+      return code is string &&
+        code.size() >= 1 &&
+        code.size() <= 32 &&
+        hashing.sha256(code).toBase64() == 'lRS9pfHaOhHB7CtNQCUrzDJ6icxMwPAfZzBIpVEzPQg=';
+    }
+
+    function isValidAdminVerification(data) {
+      return data.keys().hasAll(['passcode', 'updatedAt']) &&
+        data.keys().hasOnly(['passcode', 'updatedAt']) &&
+        isValidPasscode(data.passcode) &&
+        data.updatedAt is timestamp;
+    }
+
+    function hasValidAtomicAdminProof(slotId) {
+      return existsAfter(/databases/$(database)/documents/adminVerifications/$(slotId)) &&
+        getAfter(/databases/$(database)/documents/adminVerifications/$(slotId)).data.updatedAt == request.time &&
+        isValidPasscode(getAfter(/databases/$(database)/documents/adminVerifications/$(slotId)).data.passcode);
     }
 
     function isValidCounselingSlot(data, slotId) {
@@ -51,6 +61,19 @@ service cloud.firestore {
         data.updatedAt is timestamp;
     }
 
+    match /adminVerifications/{slotId} {
+      allow get, list, delete: if false;
+
+      allow create: if isValidSlotId(slotId) &&
+        isValidAdminVerification(incoming()) &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidSlotId(slotId) &&
+        isValidAdminVerification(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['passcode', 'updatedAt']) &&
+        incoming().updatedAt == request.time;
+    }
+
     match /counselingSlots/{slotId} {
       allow get: if isValidSlotId(slotId);
       allow list: if true;
@@ -60,16 +83,17 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time;
 
-      allow update: if isAdmin() &&
-        isValidSlotId(slotId) &&
+      allow update: if isValidSlotId(slotId) &&
         isValidCounselingSlot(incoming(), slotId) &&
         incoming().diff(existing()).affectedKeys().hasOnly(['studentName', 'updatedAt']) &&
         incoming().date == existing().date &&
         incoming().slotNumber == existing().slotNumber &&
         incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time &&
+        hasValidAtomicAdminProof(slotId);
 
-      allow delete: if isAdmin() && isValidSlotId(slotId);
+      allow delete: if isValidSlotId(slotId) &&
+        hasValidAtomicAdminProof(slotId);
     }
   }
 }

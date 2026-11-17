@@ -284,7 +284,7 @@ export const SlotModal: React.FC<SlotModalProps> = ({
                   disabled={isSubmitting}
                   className="text-xs font-medium text-slate-500 hover:text-blue-700 underline underline-offset-4 transition-colors"
                 >
-                  교사 계정으로 로그인
+                  관리자 모드로 전환
                 </button>
                 <button
                   type="button"

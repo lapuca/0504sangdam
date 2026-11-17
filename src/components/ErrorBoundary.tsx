@@ -21,7 +21,7 @@ export class ErrorBoundary extends React.Component<
       if (parsed && typeof parsed.error === 'string') {
         if (parsed.error.includes('Missing or insufficient permissions')) {
           readable =
-            '권한이 부족하여 작업을 완료할 수 없습니다. 수정 및 삭제는 교사 관리자 계정(lapuca1@gmail.com)에서만 가능합니다.';
+            '권한이 부족하여 작업을 완료할 수 없습니다. 수정 및 삭제는 교사 관리자 모드에서만 가능합니다.';
         } else {
           readable = parsed.error;
         }

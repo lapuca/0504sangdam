@@ -41,6 +41,28 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "AdminVerification": {
+      "title": "AdminVerification",
+      "description": "Write-only atomic verification record used in write batches to authorize teacher modifications and deletions.",
+      "type": "object",
+      "properties": {
+        "passcode": {
+          "type": "string",
+          "description": "Admin verification passcode validated via SHA-256 hash in security rules.",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp matching the batch request time."
+        }
+      },
+      "required": [
+        "passcode",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -49,6 +71,12 @@
         "$ref": "#/entities/CounselingSlot"
       },
       "description": "Stores student counseling slot bookings keyed by deterministic ID YYYY-MM-DD_slotNumber."
+    },
+    "/adminVerifications/{slotId}": {
+      "schema": {
+        "$ref": "#/entities/AdminVerification"
+      },
+      "description": "Write-only verification gate paired atomically with admin updates and deletes on counselingSlots."
     }
   }
 }

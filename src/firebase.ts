@@ -1,15 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  GoogleAuthProvider,
-  signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
-  signInWithCredential,
-  signOut,
-  onAuthStateChanged,
-  type User,
-} from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import {
   getFirestore,
   doc,
@@ -17,9 +7,8 @@ import {
   collection,
   onSnapshot,
   setDoc,
-  updateDoc,
-  deleteDoc,
   serverTimestamp,
+  writeBatch,
   type Timestamp,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
@@ -27,15 +16,17 @@ import firebaseConfig from '../firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-export const ADMIN_EMAIL = 'lapuca1@gmail.com';
-export const OAUTH_CLIENT_ID = firebaseConfig.oAuthClientId;
+const ADMIN_PASSCODE_SHA256_HEX =
+  '9514bda5f1da3a11c1ec2b4d40252bcc327a89cc4cc0f01f673048a551333d08';
 
-export function isVerifiedAdmin(user: User | null): boolean {
-  if (!user) return false;
-  return user.email === ADMIN_EMAIL && user.emailVerified === true;
+export async function verifyAdminPasscode(passcode: string): Promise<boolean> {
+  if (!passcode) return false;
+  const data = new TextEncoder().encode(passcode);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hex === ADMIN_PASSCODE_SHA256_HEX;
 }
 
 export enum OperationType {
@@ -106,19 +97,10 @@ testConnection();
 
 export {
   collection,
-  deleteDoc,
   doc,
-  getRedirectResult,
-  GoogleAuthProvider,
-  onAuthStateChanged,
   onSnapshot,
   serverTimestamp,
   setDoc,
-  signInWithCredential,
-  signInWithPopup,
-  signInWithRedirect,
-  signOut,
-  updateDoc,
+  writeBatch,
   type Timestamp,
-  type User,
 };

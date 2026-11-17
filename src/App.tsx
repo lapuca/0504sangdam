@@ -1,37 +1,24 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Check,
   Copy,
+  KeyRound,
   ListChecks,
-  LogIn,
-  LogOut,
   Search,
-  ShieldAlert,
   ShieldCheck,
   User as UserIcon,
 } from 'lucide-react';
 import {
-  ADMIN_EMAIL,
-  auth,
   collection,
   db,
-  deleteDoc,
   doc,
-  getRedirectResult,
-  googleProvider,
   handleFirestoreError,
-  isVerifiedAdmin,
-  onAuthStateChanged,
   onSnapshot,
   OperationType,
   serverTimestamp,
   setDoc,
-  signInWithPopup,
-  signInWithRedirect,
-  signOut,
-  updateDoc,
-  type User,
+  writeBatch,
 } from './firebase';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { CalendarGrid } from './components/CalendarGrid';
@@ -57,8 +44,7 @@ interface ModalTarget {
 }
 
 function CounselingSchedulerApp() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const [adminPasscode, setAdminPasscode] = useState<string | null>(null);
 
   const [slots, setSlots] = useState<CounselingSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(true);
@@ -75,51 +61,11 @@ function CounselingSchedulerApp() {
 
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [adminModalOpen, setAdminModalOpen] = useState(false);
 
-  const isAdmin = isVerifiedAdmin(user);
-  const isNonAdminSignedIn = Boolean(user && !isAdmin);
+  const isAdmin = adminPasscode !== null;
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthReady(true);
-    });
-
-    getRedirectResult(auth)
-      .then((result) => {
-        if (!result?.user) return;
-        if (
-          result.user.email === ADMIN_EMAIL &&
-          result.user.emailVerified === true
-        ) {
-          setToastMessage('교사 관리자 모드로 전환되었습니다.');
-        } else {
-          setAuthError(
-            `로그인된 계정(${result.user.email ?? '알 수 없음'})은 교사 관리자 계정(${ADMIN_EMAIL})이 아닙니다.`
-          );
-        }
-      })
-      .catch((error) => {
-        const code =
-          error && typeof error === 'object' && 'code' in error
-            ? String((error as { code?: unknown }).code)
-            : '';
-        const msg =
-          error instanceof Error ? error.message : '리디렉션 로그인 실패';
-        setAuthError(
-          code ? `Google 로그인 오류 (${code}): ${msg}` : msg
-        );
-      });
-
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    if (!authReady) return;
-
     const slotsRef = collection(db, 'counselingSlots');
     const unsubscribe = onSnapshot(
       slotsRef,
@@ -151,7 +97,7 @@ function CounselingSchedulerApp() {
     );
 
     return () => unsubscribe();
-  }, [authReady]);
+  }, []);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -175,100 +121,13 @@ function CounselingSchedulerApp() {
     setToastMessage(msg);
   };
 
-  const formatAuthError = (error: unknown): string => {
-    const code =
-      error && typeof error === 'object' && 'code' in error
-        ? String((error as { code?: unknown }).code)
-        : '';
-    const rawMsg =
-      error instanceof Error ? error.message : '로그인에 실패했습니다.';
-
-    if (code === 'auth/popup-blocked') {
-      return '브라우저에서 로그인 팝업이 차단되었습니다. 위 Google 로그인 버튼 또는 새 탭 열기를 이용해 주세요. (auth/popup-blocked)';
-    }
-    if (code === 'auth/popup-closed-by-user') {
-      return '로그인 창이 닫혔습니다. 위 Google 로그인 버튼 또는 새 탭 열기를 이용해 주세요. (auth/popup-closed-by-user)';
-    }
-    if (code === 'auth/unauthorized-domain') {
-      return `현재 도메인(${window.location.hostname})이 Firebase 인증 허용 도메인에 등록되지 않았습니다. (auth/unauthorized-domain)`;
-    }
-    if (code === 'auth/internal-error') {
-      return '브라우저 쿠키·팝업 제한 또는 미리보기 창(iframe) 보안 설정으로 팝업 로그인이 차단되었습니다. 위 Google 로그인 버튼이나 "새 탭에서 열어 로그인하기"를 이용해 주세요. (auth/internal-error)';
-    }
-    if (code === 'auth/cancelled-popup-request') {
-      return '이전 로그인 요청이 취소되었습니다. 다시 시도해 주세요. (auth/cancelled-popup-request)';
-    }
-    return code
-      ? `Google 로그인 중 오류가 발생했습니다 (${code}): ${rawMsg}`
-      : `Google 로그인 중 오류가 발생했습니다: ${rawMsg}`;
+  const handleOpenAdminModal = async () => {
+    setAdminModalOpen(true);
   };
 
-  const handleOpenTeacherLogin = async () => {
-    setAuthError(null);
-    setLoginModalOpen(true);
-  };
-
-  const handlePopupLogin = async () => {
-    setAuthError(null);
-    setIsLoggingIn(true);
-    try {
-      const result = await signInWithPopup(auth, googleProvider);
-      setLoginModalOpen(false);
-      if (
-        result.user.email === ADMIN_EMAIL &&
-        result.user.emailVerified === true
-      ) {
-        showToast('교사 관리자 모드로 전환되었습니다.');
-      } else {
-        setAuthError(
-          `로그인된 계정(${result.user.email ?? '알 수 없음'})은 교사 관리자 계정(${ADMIN_EMAIL})이 아닙니다.`
-        );
-      }
-    } catch (error) {
-      setAuthError(formatAuthError(error));
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleRedirectLogin = async () => {
-    setAuthError(null);
-    setIsLoggingIn(true);
-    try {
-      await signInWithRedirect(auth, googleProvider);
-    } catch (error) {
-      setAuthError(formatAuthError(error));
-      setIsLoggingIn(false);
-    }
-  };
-
-  const handleCredentialSuccess = useCallback((signedInUser: User) => {
-    setAuthError(null);
-    setLoginModalOpen(false);
-    if (
-      signedInUser.email === ADMIN_EMAIL &&
-      signedInUser.emailVerified === true
-    ) {
-      setToastMessage('교사 관리자 모드로 전환되었습니다.');
-    } else {
-      setAuthError(
-        `로그인된 계정(${signedInUser.email ?? '알 수 없음'})은 교사 관리자 계정(${ADMIN_EMAIL})이 아닙니다.`
-      );
-    }
-  }, []);
-
-  const handleCredentialError = useCallback((message: string) => {
-    setAuthError(message);
-  }, []);
-
-  const handleLogout = async () => {
-    setAuthError(null);
-    try {
-      await signOut(auth);
-      showToast('로그아웃되었습니다. (학생 신청 모드)');
-    } catch {
-      setAuthError('로그아웃 중 오류가 발생했습니다.');
-    }
+  const handleExitAdminMode = () => {
+    setAdminPasscode(null);
+    showToast('관리자 모드가 해제되었습니다. (학생 신청 모드)');
   };
 
   const handleCopyShareLink = async () => {
@@ -327,8 +186,8 @@ function CounselingSchedulerApp() {
   };
 
   const handleUpdateSlot = async (slotId: string, newStudentName: string) => {
-    if (!isAdmin) {
-      setModalError('수정은 교사 관리자 계정으로 로그인해야 가능합니다.');
+    if (!adminPasscode) {
+      setModalError('수정은 관리자 모드에서만 가능합니다.');
       return;
     }
 
@@ -343,10 +202,16 @@ function CounselingSchedulerApp() {
     const path = `counselingSlots/${slotId}`;
 
     try {
-      await updateDoc(doc(db, 'counselingSlots', slotId), {
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'adminVerifications', slotId), {
+        passcode: adminPasscode,
+        updatedAt: serverTimestamp(),
+      });
+      batch.update(doc(db, 'counselingSlots', slotId), {
         studentName: validation.trimmed,
         updatedAt: serverTimestamp(),
       });
+      await batch.commit();
       setModalTarget(null);
       showToast(`‘${validation.trimmed}’으로 이름이 수정되었습니다.`);
     } catch (error) {
@@ -357,8 +222,8 @@ function CounselingSchedulerApp() {
   };
 
   const handleDeleteSlot = async (slotId: string) => {
-    if (!isAdmin) {
-      setModalError('삭제는 교사 관리자 계정으로 로그인해야 가능합니다.');
+    if (!adminPasscode) {
+      setModalError('삭제는 관리자 모드에서만 가능합니다.');
       return;
     }
 
@@ -367,7 +232,13 @@ function CounselingSchedulerApp() {
     const path = `counselingSlots/${slotId}`;
 
     try {
-      await deleteDoc(doc(db, 'counselingSlots', slotId));
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'adminVerifications', slotId), {
+        passcode: adminPasscode,
+        updatedAt: serverTimestamp(),
+      });
+      batch.delete(doc(db, 'counselingSlots', slotId));
+      await batch.commit();
       setModalTarget(null);
       showToast('상담 예약이 삭제되어 빈 자리로 복구되었습니다.');
     } catch (error) {
@@ -434,29 +305,20 @@ function CounselingSchedulerApp() {
             {isAdmin ? (
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={handleExitAdminMode}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors whitespace-nowrap shrink-0"
               >
                 <ShieldCheck className="w-4 h-4 text-blue-700" />
-                <span>관리자 모드 · 로그아웃</span>
-              </button>
-            ) : user ? (
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0"
-              >
-                <LogOut className="w-4 h-4" />
-                <span>로그아웃</span>
+                <span>관리자 모드 · 해제</span>
               </button>
             ) : (
               <button
                 type="button"
-                onClick={handleOpenTeacherLogin}
+                onClick={handleOpenAdminModal}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0"
               >
-                <LogIn className="w-4 h-4" />
-                <span>선생님 로그인</span>
+                <KeyRound className="w-4 h-4" />
+                <span>관리자 모드</span>
               </button>
             )}
           </div>
@@ -464,45 +326,10 @@ function CounselingSchedulerApp() {
       </header>
 
       {/* Main Content */}
-      <main id="top" className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-        {/* Non-Admin Google Account Notice */}
-        {isNonAdminSignedIn && (
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-950">
-            <div className="flex items-start gap-2.5">
-              <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold">
-                  현재 로그인된 계정({user?.email})에는 관리자 권한이 없습니다.
-                </p>
-                <p className="text-xs text-amber-800 mt-0.5">
-                  기존 예약의 수정 및 삭제는 교사 계정({ADMIN_EMAIL})으로 로그인해야
-                  가능합니다.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleOpenTeacherLogin}
-              className="px-3.5 py-2 text-xs font-semibold text-amber-950 bg-white border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap shrink-0"
-            >
-              교사 계정으로 전환
-            </button>
-          </div>
-        )}
-
-        {authError && (
-          <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-900">
-            <span>{authError}</span>
-            <button
-              type="button"
-              onClick={() => setAuthError(null)}
-              className="text-xs font-semibold underline shrink-0"
-            >
-              닫기
-            </button>
-          </div>
-        )}
-
+      <main
+        id="top"
+        className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
+      >
         {/* Workspace Hero & Summary Strip */}
         <section className="space-y-5">
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
@@ -793,7 +620,7 @@ function CounselingSchedulerApp() {
                 01. 누구나 링크로 바로 입력
               </p>
               <p>
-                별도 회원가입 없이 공유된 링크로 들어와 친구들이 신청한 현황을
+                별도 로그인 없이 공유된 링크로 들어와 친구들이 신청한 현황을
                 확인하고, 비어 있는 1타임 또는 2타임 자리에 이름을 등록할 수
                 있습니다.
               </p>
@@ -813,8 +640,7 @@ function CounselingSchedulerApp() {
               </p>
               <p>
                 잘못 입력했거나 일정 변경·삭제가 필요한 경우 담임 선생님에게
-                요청하면 교사 계정({ADMIN_EMAIL})으로 로그인해 수정 및 삭제를
-                진행해 드립니다.
+                요청하면 교사 관리자 모드에서 수정 및 삭제를 진행해 드립니다.
               </p>
             </div>
           </div>
@@ -824,7 +650,7 @@ function CounselingSchedulerApp() {
       <footer className="border-t border-slate-200 bg-white mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
           <span>2026년 학급 상담 일정 캘린더 · 11월 17일 – 12월 13일</span>
-          <span>관리자 계정: {ADMIN_EMAIL}</span>
+          <span>총 27일간 · 하루 2타임 운영</span>
         </div>
       </footer>
 
@@ -850,24 +676,19 @@ function CounselingSchedulerApp() {
         onDelete={handleDeleteSlot}
         onTeacherLogin={async () => {
           setModalTarget(null);
-          await handleOpenTeacherLogin();
+          await handleOpenAdminModal();
         }}
       />
 
-      {/* Teacher Login Modal */}
+      {/* Admin Passcode Modal */}
       <TeacherLoginModal
-        isOpen={loginModalOpen}
-        errorMessage={authError}
-        isLoggingIn={isLoggingIn}
-        onClose={() => {
-          if (!isLoggingIn) {
-            setLoginModalOpen(false);
-          }
+        isOpen={adminModalOpen}
+        onClose={() => setAdminModalOpen(false)}
+        onSuccess={(verifiedPasscode) => {
+          setAdminPasscode(verifiedPasscode);
+          setAdminModalOpen(false);
+          showToast('교사 관리자 모드로 전환되었습니다.');
         }}
-        onPopupLogin={handlePopupLogin}
-        onRedirectLogin={handleRedirectLogin}
-        onCredentialSuccess={handleCredentialSuccess}
-        onCredentialError={handleCredentialError}
       />
 
       {/* Toast Feedback */}
