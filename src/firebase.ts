@@ -3,6 +3,9 @@ import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithCredential,
   signOut,
   onAuthStateChanged,
   type User,
@@ -28,6 +31,7 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export const ADMIN_EMAIL = 'lapuca1@gmail.com';
+export const OAUTH_CLIENT_ID = firebaseConfig.oAuthClientId;
 
 export function isVerifiedAdmin(user: User | null): boolean {
   if (!user) return false;
@@ -104,11 +108,15 @@ export {
   collection,
   deleteDoc,
   doc,
+  getRedirectResult,
+  GoogleAuthProvider,
   onAuthStateChanged,
   onSnapshot,
   serverTimestamp,
   setDoc,
+  signInWithCredential,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateDoc,
   type Timestamp,

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Calendar as CalendarIcon,
   Check,
@@ -18,6 +18,7 @@ import {
   db,
   deleteDoc,
   doc,
+  getRedirectResult,
   googleProvider,
   handleFirestoreError,
   isVerifiedAdmin,
@@ -27,6 +28,7 @@ import {
   serverTimestamp,
   setDoc,
   signInWithPopup,
+  signInWithRedirect,
   signOut,
   updateDoc,
   type User,
@@ -35,6 +37,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { CalendarGrid } from './components/CalendarGrid';
 import { ScheduleTableView } from './components/ScheduleTableView';
 import { SlotModal } from './components/SlotModal';
+import { TeacherLoginModal } from './components/TeacherLoginModal';
 import {
   getSlotId,
   STUDENT_NAME_MAX_LENGTH,
@@ -73,6 +76,8 @@ function CounselingSchedulerApp() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const isAdmin = isVerifiedAdmin(user);
   const isNonAdminSignedIn = Boolean(user && !isAdmin);
@@ -82,6 +87,33 @@ function CounselingSchedulerApp() {
       setUser(currentUser);
       setAuthReady(true);
     });
+
+    getRedirectResult(auth)
+      .then((result) => {
+        if (!result?.user) return;
+        if (
+          result.user.email === ADMIN_EMAIL &&
+          result.user.emailVerified === true
+        ) {
+          setToastMessage('교사 관리자 모드로 전환되었습니다.');
+        } else {
+          setAuthError(
+            `로그인된 계정(${result.user.email ?? '알 수 없음'})은 교사 관리자 계정(${ADMIN_EMAIL})이 아닙니다.`
+          );
+        }
+      })
+      .catch((error) => {
+        const code =
+          error && typeof error === 'object' && 'code' in error
+            ? String((error as { code?: unknown }).code)
+            : '';
+        const msg =
+          error instanceof Error ? error.message : '리디렉션 로그인 실패';
+        setAuthError(
+          code ? `Google 로그인 오류 (${code}): ${msg}` : msg
+        );
+      });
+
     return () => unsubscribe();
   }, []);
 
@@ -143,10 +175,45 @@ function CounselingSchedulerApp() {
     setToastMessage(msg);
   };
 
-  const handleTeacherLogin = async () => {
+  const formatAuthError = (error: unknown): string => {
+    const code =
+      error && typeof error === 'object' && 'code' in error
+        ? String((error as { code?: unknown }).code)
+        : '';
+    const rawMsg =
+      error instanceof Error ? error.message : '로그인에 실패했습니다.';
+
+    if (code === 'auth/popup-blocked') {
+      return '브라우저에서 로그인 팝업이 차단되었습니다. 위 Google 로그인 버튼 또는 새 탭 열기를 이용해 주세요. (auth/popup-blocked)';
+    }
+    if (code === 'auth/popup-closed-by-user') {
+      return '로그인 창이 닫혔습니다. 위 Google 로그인 버튼 또는 새 탭 열기를 이용해 주세요. (auth/popup-closed-by-user)';
+    }
+    if (code === 'auth/unauthorized-domain') {
+      return `현재 도메인(${window.location.hostname})이 Firebase 인증 허용 도메인에 등록되지 않았습니다. (auth/unauthorized-domain)`;
+    }
+    if (code === 'auth/internal-error') {
+      return '브라우저 쿠키·팝업 제한 또는 미리보기 창(iframe) 보안 설정으로 팝업 로그인이 차단되었습니다. 위 Google 로그인 버튼이나 "새 탭에서 열어 로그인하기"를 이용해 주세요. (auth/internal-error)';
+    }
+    if (code === 'auth/cancelled-popup-request') {
+      return '이전 로그인 요청이 취소되었습니다. 다시 시도해 주세요. (auth/cancelled-popup-request)';
+    }
+    return code
+      ? `Google 로그인 중 오류가 발생했습니다 (${code}): ${rawMsg}`
+      : `Google 로그인 중 오류가 발생했습니다: ${rawMsg}`;
+  };
+
+  const handleOpenTeacherLogin = async () => {
     setAuthError(null);
+    setLoginModalOpen(true);
+  };
+
+  const handlePopupLogin = async () => {
+    setAuthError(null);
+    setIsLoggingIn(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
+      setLoginModalOpen(false);
       if (
         result.user.email === ADMIN_EMAIL &&
         result.user.emailVerified === true
@@ -158,13 +225,41 @@ function CounselingSchedulerApp() {
         );
       }
     } catch (error) {
-      const errMsg =
-        error instanceof Error ? error.message : '로그인에 실패했습니다.';
-      if (!errMsg.includes('popup-closed-by-user')) {
-        setAuthError('Google 로그인 중 오류가 발생했습니다. 다시 시도해 주세요.');
-      }
+      setAuthError(formatAuthError(error));
+    } finally {
+      setIsLoggingIn(false);
     }
   };
+
+  const handleRedirectLogin = async () => {
+    setAuthError(null);
+    setIsLoggingIn(true);
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (error) {
+      setAuthError(formatAuthError(error));
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleCredentialSuccess = useCallback((signedInUser: User) => {
+    setAuthError(null);
+    setLoginModalOpen(false);
+    if (
+      signedInUser.email === ADMIN_EMAIL &&
+      signedInUser.emailVerified === true
+    ) {
+      setToastMessage('교사 관리자 모드로 전환되었습니다.');
+    } else {
+      setAuthError(
+        `로그인된 계정(${signedInUser.email ?? '알 수 없음'})은 교사 관리자 계정(${ADMIN_EMAIL})이 아닙니다.`
+      );
+    }
+  }, []);
+
+  const handleCredentialError = useCallback((message: string) => {
+    setAuthError(message);
+  }, []);
 
   const handleLogout = async () => {
     setAuthError(null);
@@ -357,7 +452,7 @@ function CounselingSchedulerApp() {
             ) : (
               <button
                 type="button"
-                onClick={handleTeacherLogin}
+                onClick={handleOpenTeacherLogin}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0"
               >
                 <LogIn className="w-4 h-4" />
@@ -387,7 +482,7 @@ function CounselingSchedulerApp() {
             </div>
             <button
               type="button"
-              onClick={handleTeacherLogin}
+              onClick={handleOpenTeacherLogin}
               className="px-3.5 py-2 text-xs font-semibold text-amber-950 bg-white border border-amber-300 rounded-lg hover:bg-amber-100 transition-colors whitespace-nowrap shrink-0"
             >
               교사 계정으로 전환
@@ -753,7 +848,26 @@ function CounselingSchedulerApp() {
         onCreate={handleCreateSlot}
         onUpdate={handleUpdateSlot}
         onDelete={handleDeleteSlot}
-        onTeacherLogin={handleTeacherLogin}
+        onTeacherLogin={async () => {
+          setModalTarget(null);
+          await handleOpenTeacherLogin();
+        }}
+      />
+
+      {/* Teacher Login Modal */}
+      <TeacherLoginModal
+        isOpen={loginModalOpen}
+        errorMessage={authError}
+        isLoggingIn={isLoggingIn}
+        onClose={() => {
+          if (!isLoggingIn) {
+            setLoginModalOpen(false);
+          }
+        }}
+        onPopupLogin={handlePopupLogin}
+        onRedirectLogin={handleRedirectLogin}
+        onCredentialSuccess={handleCredentialSuccess}
+        onCredentialError={handleCredentialError}
       />
 
       {/* Toast Feedback */}
