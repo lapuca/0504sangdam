@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email == 'lapuca1@gmail.com' &&
+        request.auth.token.email_verified == true;
+    }
+
+    function isValidDateString(d) {
+      return d is string &&
+        d.size() == 10 &&
+        d.matches('^2026-(11-(1[7-9]|2[0-9]|30)|12-(0[1-9]|1[0-3]))$');
+    }
+
+    function isValidSlotId(slotId) {
+      return slotId is string &&
+        slotId.size() == 12 &&
+        slotId.matches('^2026-(11-(1[7-9]|2[0-9]|30)|12-(0[1-9]|1[0-3]))_[12]$');
+    }
+
+    function isValidCounselingSlot(data, slotId) {
+      return data.keys().hasAll(['date', 'slotNumber', 'studentName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['date', 'slotNumber', 'studentName', 'createdAt', 'updatedAt']) &&
+        isValidDateString(data.date) &&
+        data.slotNumber is int &&
+        (data.slotNumber == 1 || data.slotNumber == 2) &&
+        ((data.slotNumber == 1 && slotId == data.date + '_1') ||
+         (data.slotNumber == 2 && slotId == data.date + '_2')) &&
+        data.studentName is string &&
+        data.studentName.size() >= 1 &&
+        data.studentName.size() <= 30 &&
+        data.studentName.matches('.*\\S.*') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /counselingSlots/{slotId} {
+      allow get: if isValidSlotId(slotId);
+      allow list: if true;
+
+      allow create: if isValidSlotId(slotId) &&
+        isValidCounselingSlot(incoming(), slotId) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isAdmin() &&
+        isValidSlotId(slotId) &&
+        isValidCounselingSlot(incoming(), slotId) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['studentName', 'updatedAt']) &&
+        incoming().date == existing().date &&
+        incoming().slotNumber == existing().slotNumber &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidSlotId(slotId);
+    }
+  }
+}

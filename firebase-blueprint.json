@@ -1,0 +1,54 @@
+{
+  "entities": {
+    "CounselingSlot": {
+      "title": "CounselingSlot",
+      "description": "A single student counseling slot booking for a specific date (2026-11-17 to 2026-12-13) and time slot (1 or 2).",
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "Date in YYYY-MM-DD format within the 27-day counseling schedule (2026-11-17 to 2026-12-13).",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^2026-(11-(1[7-9]|2[0-9]|30)|12-(0[1-9]|1[0-3]))$"
+        },
+        "slotNumber": {
+          "type": "integer",
+          "description": "Time slot index for the day: 1 (첫번째 타임) or 2 (두번째 타임)."
+        },
+        "studentName": {
+          "type": "string",
+          "description": "Name of the student registered for this counseling slot.",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": ".*\\S.*"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the booking was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the booking was last updated."
+        }
+      },
+      "required": [
+        "date",
+        "slotNumber",
+        "studentName",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/counselingSlots/{slotId}": {
+      "schema": {
+        "$ref": "#/entities/CounselingSlot"
+      },
+      "description": "Stores student counseling slot bookings keyed by deterministic ID YYYY-MM-DD_slotNumber."
+    }
+  }
+}
