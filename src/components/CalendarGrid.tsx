@@ -18,7 +18,7 @@ interface CalendarGridProps {
   onSelectSlot: (date: string, slotNumber: SlotNumber) => void;
 }
 
-const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const WEEKDAYS = ['월', '화', '수', '목', '금'];
 
 export const CalendarGrid: React.FC<CalendarGridProps> = ({
   slotMap,
@@ -111,14 +111,14 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
   };
 
   const renderCell = (cell: CalendarCell) => {
-    const { scheduleDay, isCurrentMonth, dayOfWeek, day, month } = cell;
+    const { scheduleDay, isCurrentMonth, day, month } = cell;
 
-    // Out of 27-day counseling window or adjacent month padding
+    // Out of 27-weekday counseling window or adjacent month padding
     if (!scheduleDay) {
       return (
         <div
           key={cell.date}
-          className={`hidden md:flex flex-col justify-between p-3 min-h-[132px] border-b border-r border-slate-200 ${
+          className={`hidden md:flex flex-col justify-between p-3.5 min-h-[132px] border-b border-r border-slate-200 ${
             isCurrentMonth ? 'bg-slate-50/70' : 'bg-slate-100/40'
           }`}
         >
@@ -128,7 +128,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
                 isCurrentMonth ? 'text-slate-400' : 'text-slate-300'
               }`}
             >
-              {isCurrentMonth ? day : `${month}.${day}`}
+              {isCurrentMonth ? `${day}일` : `${month}.${day}`}
             </span>
           </div>
           <span className="text-[11px] text-slate-400">
@@ -151,13 +151,10 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
       (onlyAvailable && isFull) ||
       (normalizedQuery.length > 0 && !hasSearchMatch);
 
-    const isSunday = dayOfWeek === 0;
-    const isSaturday = dayOfWeek === 6;
-
     return (
       <div
         key={cell.date}
-        className={`flex flex-col justify-between p-3 min-h-[132px] border-b border-r border-slate-200 transition-opacity ${
+        className={`flex flex-col justify-between p-3.5 min-h-[132px] border-b border-r border-slate-200 transition-opacity ${
           scheduleDay.isToday ? 'bg-blue-50/40' : 'bg-white'
         } ${isDimmedByFilter ? 'opacity-35' : 'opacity-100'}`}
       >
@@ -166,13 +163,7 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
           <div className="flex items-baseline gap-1.5">
             <span
               className={`text-sm font-bold tabular-nums ${
-                scheduleDay.isToday
-                  ? 'text-blue-700'
-                  : isSunday
-                    ? 'text-red-600'
-                    : isSaturday
-                      ? 'text-blue-600'
-                      : 'text-slate-900'
+                scheduleDay.isToday ? 'text-blue-700' : 'text-slate-900'
               }`}
             >
               {scheduleDay.day}일
@@ -215,26 +206,20 @@ export const CalendarGrid: React.FC<CalendarGridProps> = ({
             </p>
           </div>
 
-          {/* Weekday Column Headers (Desktop / Tablet 7-col Calendar) */}
-          <div className="hidden md:grid grid-cols-7 border-b border-slate-200 bg-slate-50/40">
-            {WEEKDAYS.map((dayName, idx) => (
+          {/* Weekday Column Headers (Mon-Fri 5-col Calendar) */}
+          <div className="hidden md:grid grid-cols-5 border-b border-slate-200 bg-slate-50/40">
+            {WEEKDAYS.map((dayName) => (
               <div
                 key={dayName}
-                className={`py-2.5 px-3 text-xs font-semibold text-center border-r last:border-r-0 border-slate-200 ${
-                  idx === 0
-                    ? 'text-red-600'
-                    : idx === 6
-                      ? 'text-blue-600'
-                      : 'text-slate-600'
-                }`}
+                className="py-2.5 px-3 text-xs font-semibold text-center text-slate-600 border-r last:border-r-0 border-slate-200"
               >
                 {dayName}
               </div>
             ))}
           </div>
 
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-7 [&>*:nth-child(7n)]:md:border-r-0">
+          {/* 5-Column Weekday Calendar Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 [&>*:nth-child(5n)]:md:border-r-0">
             {monthBlock.cells.map((cell) => renderCell(cell))}
           </div>
         </section>

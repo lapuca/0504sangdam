@@ -16,7 +16,7 @@ export interface ScheduleDay {
   year: number;
   month: number; // 11 or 12
   day: number;
-  dayOfWeek: number; // 0 = Sun ... 6 = Sat
+  dayOfWeek: number; // 1 = Mon ... 5 = Fri
   weekdayLabel: string;
   dayIndex: number; // 1..27
   isToday: boolean;
@@ -43,12 +43,13 @@ export interface CalendarMonthBlock {
 export const TOTAL_DAYS = 27;
 export const TARGET_STUDENT_COUNT = 27;
 export const START_DATE = '2026-11-17';
-export const END_DATE = '2026-12-13';
+export const END_DATE = '2026-12-23';
 
 // Synchronized verbatim with firebase-blueprint.json
 export const STUDENT_NAME_MAX_LENGTH = 30;
 export const STUDENT_NAME_MIN_LENGTH = 1;
-export const VALID_DATE_REGEX = /^2026-(11-(1[7-9]|2[0-9]|30)|12-(0[1-9]|1[0-3]))$/;
+export const VALID_DATE_REGEX =
+  /^2026-(11-(1[7-9]|20|2[3-7]|30)|12-(0[1-47-9]|1[014-8]|2[1-3]))$/;
 export const NON_WHITESPACE_REGEX = /\S/;
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -71,7 +72,10 @@ export function validateStudentName(rawName: string): {
   error?: string;
 } {
   const trimmed = rawName.trim();
-  if (trimmed.length < STUDENT_NAME_MIN_LENGTH || !NON_WHITESPACE_REGEX.test(trimmed)) {
+  if (
+    trimmed.length < STUDENT_NAME_MIN_LENGTH ||
+    !NON_WHITESPACE_REGEX.test(trimmed)
+  ) {
     return {
       valid: false,
       trimmed,
@@ -90,28 +94,29 @@ export function validateStudentName(rawName: string): {
 
 export function generateScheduleDays(): ScheduleDay[] {
   const days: ScheduleDay[] = [];
-  // Start at 2026-11-17 (local noon to avoid DST edge cases)
-  const start = new Date(2026, 10, 17, 12, 0, 0);
+  // Start at 2026-11-17 (local noon to avoid DST edge cases), skipping Saturday (6) and Sunday (0)
+  const cursor = new Date(2026, 10, 17, 12, 0, 0);
 
-  for (let i = 0; i < TOTAL_DAYS; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    const year = d.getFullYear();
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
-    const dayOfWeek = d.getDay();
-    const dateStr = toDateString(year, month, day);
+  while (days.length < TOTAL_DAYS) {
+    const dayOfWeek = cursor.getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+      const year = cursor.getFullYear();
+      const month = cursor.getMonth() + 1;
+      const day = cursor.getDate();
+      const dateStr = toDateString(year, month, day);
 
-    days.push({
-      date: dateStr,
-      year,
-      month,
-      day,
-      dayOfWeek,
-      weekdayLabel: WEEKDAY_LABELS[dayOfWeek],
-      dayIndex: i + 1,
-      isToday: dateStr === START_DATE,
-    });
+      days.push({
+        date: dateStr,
+        year,
+        month,
+        day,
+        dayOfWeek,
+        weekdayLabel: WEEKDAY_LABELS[dayOfWeek],
+        dayIndex: days.length + 1,
+        isToday: dateStr === START_DATE,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
   }
   return days;
 }
@@ -137,51 +142,49 @@ export function formatKoreanDate(dateStr: string): string {
 }
 
 export function getCalendarMonths(): CalendarMonthBlock[] {
-  // November 2026: Active range 11/17 ~ 11/30.
-  // Show weeks covering 11/15 (Sun) through 12/05 (Sat) or cleanly Nov 15..30 + Dec 1..5 trailing,
-  // OR Nov 15..30 padded to week end & Dec 1..13 padded to week start/end.
-  // Let's build two crisp month calendars showing the active weeks of each month:
-  // 1) 2026년 11월: Weeks from 2026-11-15 (Sun) to 2026-12-05 (Sat) -> wait, if 12/1..12/5 is in Nov's last row,
-  //    better to show each month cleanly: Nov 15..30 (with Dec 1..5 muted as next-month cells), and Dec 1..13 (with Nov 29..30 muted & Dec 14..19 muted).
-  //    Wait: even cleaner! In Nov 2026, Nov 30 is Monday. If Nov shows Nov 15~Nov 30 + Dec 1~5 as non-currentMonth empty cells (like Google Calendar / Naver Calendar),
-  //    and Dec shows Nov 29~30 as non-currentMonth empty cells + Dec 1~13 + Dec 14~19 muted, there's zero confusion!
-
-  const buildMonthWeeks = (
+  // Build 5-column Mon-Fri weekday calendar blocks (excluding Saturday and Sunday)
+  const buildWeekdayMonthBlock = (
     year: number,
     month: number,
-    startDay: number,
-    endDay: number
+    firstActiveDay: number,
+    lastActiveDay: number
   ): CalendarCell[] => {
-    const firstVisible = new Date(year, month - 1, startDay, 12, 0, 0);
-    const startOffset = firstVisible.getDay(); // days before startDay back to Sunday
+    const firstVisible = new Date(year, month - 1, firstActiveDay, 12, 0, 0);
+    // Align back to Monday (getDay() === 1)
+    const startOffset = firstVisible.getDay() - 1;
     const gridStart = new Date(firstVisible);
     gridStart.setDate(firstVisible.getDate() - startOffset);
 
-    const lastVisible = new Date(year, month - 1, endDay, 12, 0, 0);
-    const endOffset = 6 - lastVisible.getDay(); // days after endDay up to Saturday
+    const lastVisible = new Date(year, month - 1, lastActiveDay, 12, 0, 0);
+    // Align forward to Friday (getDay() === 5)
+    const endOffset = 5 - lastVisible.getDay();
     const gridEnd = new Date(lastVisible);
     gridEnd.setDate(lastVisible.getDate() + endOffset);
 
     const cells: CalendarCell[] = [];
     const cursor = new Date(gridStart);
     while (cursor <= gridEnd) {
-      const cy = cursor.getFullYear();
-      const cm = cursor.getMonth() + 1;
-      const cd = cursor.getDate();
       const dow = cursor.getDay();
-      const dateStr = toDateString(cy, cm, cd);
-      const isCurrentMonth = cy === year && cm === month;
-      const scheduleDay = isCurrentMonth ? SCHEDULE_DAY_MAP.get(dateStr) ?? null : null;
+      if (dow !== 0 && dow !== 6) {
+        const cy = cursor.getFullYear();
+        const cm = cursor.getMonth() + 1;
+        const cd = cursor.getDate();
+        const dateStr = toDateString(cy, cm, cd);
+        const isCurrentMonth = cy === year && cm === month;
+        const scheduleDay = isCurrentMonth
+          ? SCHEDULE_DAY_MAP.get(dateStr) ?? null
+          : null;
 
-      cells.push({
-        date: dateStr,
-        year: cy,
-        month: cm,
-        day: cd,
-        dayOfWeek: dow,
-        isCurrentMonth,
-        scheduleDay,
-      });
+        cells.push({
+          date: dateStr,
+          year: cy,
+          month: cm,
+          day: cd,
+          dayOfWeek: dow,
+          isCurrentMonth,
+          scheduleDay,
+        });
+      }
       cursor.setDate(cursor.getDate() + 1);
     }
     return cells;
@@ -192,15 +195,15 @@ export function getCalendarMonths(): CalendarMonthBlock[] {
       year: 2026,
       month: 11,
       title: '2026년 11월',
-      subtitle: '11월 17일(화) – 11월 30일(월) · 14일간',
-      cells: buildMonthWeeks(2026, 11, 15, 30),
+      subtitle: '11월 17일(화) – 11월 30일(월) · 평일 10일간',
+      cells: buildWeekdayMonthBlock(2026, 11, 17, 30),
     },
     {
       year: 2026,
       month: 12,
       title: '2026년 12월',
-      subtitle: '12월 1일(화) – 12월 13일(일) · 13일간',
-      cells: buildMonthWeeks(2026, 12, 1, 13),
+      subtitle: '12월 1일(화) – 12월 23일(수) · 평일 17일간',
+      cells: buildWeekdayMonthBlock(2026, 12, 1, 23),
     },
   ];
 }

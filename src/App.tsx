@@ -335,9 +335,9 @@ function CounselingSchedulerApp() {
           <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
             <div className="space-y-2 max-w-2xl">
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-slate-500 tabular-nums">
-                <span>2026년 11월 17일 – 12월 13일</span>
+                <span>2026년 11월 17일 – 12월 23일 (월–금)</span>
                 <span aria-hidden="true">·</span>
-                <span>총 {TOTAL_DAYS}일간</span>
+                <span>평일 {TOTAL_DAYS}일간 (주말 제외)</span>
                 <span aria-hidden="true">·</span>
                 <span>하루 2타임 (1타임 / 2타임)</span>
                 <span aria-hidden="true">·</span>
@@ -397,11 +397,11 @@ function CounselingSchedulerApp() {
               </p>
             </div>
             <div className="px-5 py-4">
-              <p className="text-xs font-medium text-slate-500">상담 진행 기간</p>
+              <p className="text-xs font-medium text-slate-500">상담 진행 기간 (월–금)</p>
               <p className="mt-1 text-xl font-bold text-slate-900 tabular-nums">
-                27일간
+                평일 27일
                 <span className="text-xs font-medium text-slate-500 ml-1.5">
-                  11.17 – 12.13
+                  11.17 – 12.23
                 </span>
               </p>
             </div>
@@ -548,7 +548,7 @@ function CounselingSchedulerApp() {
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
-                  12월 (1–13일)
+                  12월 (1–23일)
                 </button>
               </div>
             ) : (
@@ -649,8 +649,8 @@ function CounselingSchedulerApp() {
 
       <footer className="border-t border-slate-200 bg-white mt-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
-          <span>2026년 학급 상담 일정 캘린더 · 11월 17일 – 12월 13일</span>
-          <span>총 27일간 · 하루 2타임 운영</span>
+          <span>2026년 학급 상담 일정 캘린더 · 11월 17일 – 12월 23일 (월–금)</span>
+          <span>주말 제외 평일 27일간 · 하루 2타임 운영</span>
         </div>
       </footer>
 

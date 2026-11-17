@@ -65,7 +65,7 @@ export const ScheduleTableView: React.FC<ScheduleTableViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = '상담일정_2026_11_17_27일.csv';
+    link.download = '상담일정_2026_11_17_평일27일.csv';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -77,7 +77,7 @@ export const ScheduleTableView: React.FC<ScheduleTableViewProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4 border-b border-slate-200 bg-slate-50/70">
         <div>
           <h2 className="text-base font-bold text-slate-900">
-            27일간 상담 일정 전체 명단
+            평일 27일간 상담 일정 전체 명단 (주말 제외)
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
             빈 자리를 클릭하면 바로 이름을 등록할 수 있습니다.
